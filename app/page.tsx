@@ -6,40 +6,43 @@ export default function Home() {
   const [brief, setBrief] = useState("");
   const [service, setService] = useState("");
   const [proposal, setProposal] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function generateProposal() {
+  async function generateProposal() {
     if (!brief.trim() || !service.trim()) {
       alert("Add the client brief and your service first.");
       return;
     }
 
-    const generated = `Subject: Proposal for Your Project
+    setLoading(true);
+    setProposal("");
 
-Hi,
+    try {
+      const res = await fetch("/api/generate-proposal", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          brief,
+          service
+        })
+      });
 
-Thank you for sharing the project brief. Based on what you need, I can help you with ${service} and deliver a clear, professional result.
+      const data = await res.json();
 
-Project Understanding:
-${brief}
+      if (!res.ok) {
+        alert(data.error || "Generation failed.");
+        return;
+      }
 
-Proposed Solution:
-I will create a focused solution that is easy to understand, conversion-oriented, and aligned with your business goals.
-
-Scope of Work:
-1. Review your requirements.
-2. Create the first version.
-3. Refine based on your feedback.
-4. Deliver the final version ready to use.
-
-Timeline:
-The first draft can be delivered within 3–5 business days.
-
-Next Step:
-If this sounds good, I can start immediately.
-
-Best regards`;
-
-    setProposal(generated);
+      setProposal(data.proposal);
+    } catch (error) {
+      console.error(error);
+      alert("Generation failed. Check server logs.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function copyProposal() {
@@ -100,9 +103,10 @@ Best regards`;
           <button
             type="button"
             onClick={generateProposal}
-            className="mt-6 w-full rounded-xl bg-emerald-500 px-5 py-4 font-semibold text-black transition hover:bg-emerald-400"
+            disabled={loading}
+            className="mt-6 w-full rounded-xl bg-emerald-500 px-5 py-4 font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Generate Proposal
+            {loading ? "Generating with AI..." : "Generate Proposal"}
           </button>
         </div>
 
@@ -111,7 +115,7 @@ Best regards`;
             <div>
               <p className="text-sm text-emerald-400">Generated Proposal</p>
               <h2 className="mt-1 text-2xl font-bold">
-                {proposal ? "Draft ready to send" : "Waiting for generation"}
+                {proposal ? "AI draft ready to send" : "Waiting for generation"}
               </h2>
             </div>
 
@@ -125,7 +129,9 @@ Best regards`;
           </div>
 
           <pre className="min-h-40 whitespace-pre-wrap rounded-xl bg-black p-5 text-sm leading-7 text-zinc-200">
-            {proposal || "Your generated proposal will appear here after clicking Generate Proposal."}
+            {loading
+              ? "Generating a custom proposal..."
+              : proposal || "Your AI-generated proposal will appear here."}
           </pre>
         </section>
       </section>
