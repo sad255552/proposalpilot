@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  allowedDevOrigins: ["76.13.51.115"],
+  turbopack: {
+    root: "/root/proposalpilot"
+  }
 };
 
 export default nextConfig;
