@@ -7,6 +7,7 @@ export default function Home() {
   const [service, setService] = useState("");
   const [proposal, setProposal] = useState("");
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   async function generateProposal() {
     if (!brief.trim() || !service.trim()) {
@@ -45,6 +46,43 @@ export default function Home() {
     }
   }
 
+  async function saveProposal() {
+    if (!proposal.trim()) {
+      alert("Generate a proposal first.");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const res = await fetch("/api/save-proposal", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          clientBrief: brief,
+          service,
+          proposal
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || "Save failed.");
+        return;
+      }
+
+      alert("Proposal saved successfully.");
+    } catch (error) {
+      console.error(error);
+      alert("Save failed. Check server logs.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function copyProposal() {
     if (!proposal) {
       alert("Generate a proposal first.");
@@ -58,9 +96,18 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-black text-white">
       <section className="mx-auto max-w-6xl px-6 py-20">
-        <p className="mb-4 text-sm font-semibold text-emerald-400">
-          ProposalPilot
-        </p>
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <p className="text-sm font-semibold text-emerald-400">
+            ProposalPilot
+          </p>
+
+          <a
+            href="/dashboard"
+            className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-zinc-900"
+          >
+            Dashboard
+          </a>
+        </div>
 
         <h1 className="text-5xl font-bold tracking-tight md:text-7xl">
           Write client-winning proposals in 60 seconds.
@@ -119,13 +166,24 @@ export default function Home() {
               </h2>
             </div>
 
-            <button
-              type="button"
-              onClick={copyProposal}
-              className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-zinc-900"
-            >
-              Copy
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={copyProposal}
+                className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-zinc-900"
+              >
+                Copy
+              </button>
+
+              <button
+                type="button"
+                onClick={saveProposal}
+                disabled={saving}
+                className="rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? "Saving..." : "Save"}
+              </button>
+            </div>
           </div>
 
           <pre className="min-h-40 whitespace-pre-wrap rounded-xl bg-black p-5 text-sm leading-7 text-zinc-200">
