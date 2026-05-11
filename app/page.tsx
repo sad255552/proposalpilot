@@ -101,12 +101,21 @@ export default function Home() {
             ProposalPilot
           </p>
 
-          <a
-            href="/dashboard"
-            className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-zinc-900"
-          >
-            Dashboard
-          </a>
+          <div className="flex gap-2">
+            <a
+              href="/pricing"
+              className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-zinc-900"
+            >
+              Pricing
+            </a>
+
+            <a
+              href="/dashboard"
+              className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-zinc-900"
+            >
+              Dashboard
+            </a>
+          </div>
         </div>
 
         <h1 className="text-5xl font-bold tracking-tight md:text-7xl">
