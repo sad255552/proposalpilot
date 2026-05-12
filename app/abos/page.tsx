@@ -25,28 +25,42 @@ export default function ABOSPage() {
 
   async function scanMarket() {
     setLoading(true);
-    const res = await fetch("/api/abos/scan", { method: "POST" });
-    const json = await res.json();
 
-    if (!res.ok) alert(json.error || "Scan failed");
+    try {
+      const res = await fetch("/api/abos/scan", { method: "POST" });
+      const json = await res.json();
 
-    await loadState();
-    setLoading(false);
+      if (!res.ok) {
+        alert(json.error || "Scan failed");
+      }
+
+      await loadState();
+    } catch (error: any) {
+      alert(error.message || "Scan request failed");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function runABOS() {
     setLoading(true);
-    const res = await fetch("/api/abos/run", { method: "POST" });
-    const json = await res.json();
 
-    if (!res.ok) {
-      alert(json.error || "ABOS run failed");
-    } else {
-      setLatestRun(json.run);
+    try {
+      const res = await fetch("/api/abos/run", { method: "POST" });
+      const json = await res.json();
+
+      if (!res.ok) {
+        alert(json.error || "ABOS run failed");
+      } else {
+        setLatestRun(json.run);
+      }
+
+      await loadState();
+    } catch (error: any) {
+      alert(error.message || "ABOS run request failed");
+    } finally {
+      setLoading(false);
     }
-
-    await loadState();
-    setLoading(false);
   }
 
   const opportunities = state.opportunities || [];
