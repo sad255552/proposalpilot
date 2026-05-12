@@ -52,6 +52,35 @@ export default function AccountPage() {
     setLoading(false);
   }
 
+  async function openBillingPortal() {
+    const { data } = await supabaseBrowser.auth.getUser();
+
+    if (!data.user) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const res = await fetch("/api/billing/portal", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        userId: data.user.id,
+        email: data.user.email
+      })
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      alert(json.error || "Failed to open billing portal.");
+      return;
+    }
+
+    window.location.href = json.url;
+  }
+
   async function logout() {
     await supabaseBrowser.auth.signOut();
     window.location.href = "/";
@@ -123,6 +152,24 @@ export default function AccountPage() {
               >
                 {usage?.is_pro ? "View pricing" : "Upgrade to Pro"}
               </a>
+
+              {usage?.is_pro && (
+                <button
+                  onClick={openBillingPortal}
+                  className="rounded-xl border border-emerald-700 px-5 py-4 font-semibold text-emerald-300 transition hover:bg-emerald-950"
+                >
+                  Manage Subscription
+                </button>
+              )}
+
+              {usage?.is_pro && (
+                <button
+                  onClick={openBillingPortal}
+                  className="rounded-xl border border-emerald-700 px-5 py-4 font-semibold text-emerald-300 transition hover:bg-emerald-950"
+                >
+                  Manage Subscription
+                </button>
+              )}
 
               <a
                 href="/dashboard"
