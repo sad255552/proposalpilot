@@ -1,6 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+type Usage = {
+  generationCount: number;
+  isPro: boolean;
+  freeLimit: number;
+  remaining: number | null;
+  canGenerate: boolean;
+};
 
 export default function Home() {
   const [brief, setBrief] = useState("");
@@ -9,9 +17,68 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [userId, setUserId] = useState("");
+  const [usage, setUsage] = useState<Usage | null>(null);
+
+  useEffect(() => {
+    let storedUserId = localStorage.getItem("proposalpilot_user_id");
+
+    if (!storedUserId) {
+      storedUserId = generateUserId();
+      localStorage.setItem("proposalpilot_user_id", storedUserId);
+    }
+
+    setUserId(storedUserId);
+    checkUsage(storedUserId);
+  }, []);
+
+  async function checkUsage(id = userId) {
+    if (!id) return;
+
+    const res = await fetch("/api/usage/check", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        userId: id
+      })
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      setUsage(data);
+    }
+  }
+
+  async function incrementUsage(id = userId) {
+    if (!id) return;
+
+    await fetch("/api/usage/increment", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        userId: id
+      })
+    });
+
+    await checkUsage(id);
+  }
+
   async function generateProposal() {
     if (!brief.trim() || !service.trim()) {
       alert("Add the client brief and your service first.");
+      return;
+    }
+
+    await checkUsage();
+
+    if (usage && !usage.canGenerate) {
+      alert("Free limit reached. Upgrade to Pro for unlimited proposals.");
+      window.location.href = "/pricing";
       return;
     }
 
@@ -38,6 +105,7 @@ export default function Home() {
       }
 
       setProposal(data.proposal);
+      await incrementUsage();
     } catch (error) {
       console.error(error);
       alert("Generation failed. Check server logs.");
@@ -97,9 +165,19 @@ export default function Home() {
     <main className="min-h-screen bg-black text-white">
       <section className="mx-auto max-w-6xl px-6 py-20">
         <div className="mb-6 flex items-center justify-between gap-4">
-          <p className="text-sm font-semibold text-emerald-400">
-            ProposalPilot
-          </p>
+          <div>
+            <p className="text-sm font-semibold text-emerald-400">
+              ProposalPilot
+            </p>
+
+            <p className="mt-2 text-xs text-zinc-500">
+              {usage
+                ? usage.isPro
+                  ? "Pro plan active · unlimited proposals"
+                  : `${usage.remaining} free generations remaining`
+                : "Checking usage..."}
+            </p>
+          </div>
 
           <div className="flex gap-2">
             <a
@@ -159,11 +237,24 @@ export default function Home() {
           <button
             type="button"
             onClick={generateProposal}
-            disabled={loading}
+            disabled={loading || !!usage?.canGenerate === false}
             className="mt-6 w-full rounded-xl bg-emerald-500 px-5 py-4 font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? "Generating with AI..." : "Generate Proposal"}
+            {loading
+              ? "Generating with AI..."
+              : usage && !usage.canGenerate
+                ? "Upgrade to Pro to continue"
+                : "Generate Proposal"}
           </button>
+
+          {usage && !usage.canGenerate && (
+            <a
+              href="/pricing"
+              className="mt-3 block w-full rounded-xl border border-emerald-700 px-5 py-4 text-center font-semibold text-emerald-300 transition hover:bg-emerald-950"
+            >
+              Upgrade now
+            </a>
+          )}
         </div>
 
         <section className="mt-8 rounded-2xl border border-emerald-900 bg-zinc-950 p-6 shadow-2xl">
@@ -204,6 +295,10 @@ export default function Home() {
       </section>
     </main>
   );
+}
+
+function generateUserId() {
+  return `user_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
 function MiniCard({ text }: { text: string }) {
