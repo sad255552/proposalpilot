@@ -3,7 +3,7 @@ import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     if (!process.env.STRIPE_SECRET_KEY) {
       return NextResponse.json(
@@ -19,10 +19,24 @@ export async function GET() {
       );
     }
 
+    const url = new URL(req.url);
+    const userId = url.searchParams.get("user_id");
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Missing user_id in checkout URL." },
+        { status: 400 }
+      );
+    }
+
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://76.13.51.115:3002";
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
+      client_reference_id: userId,
+      metadata: {
+        user_id: userId
+      },
       line_items: [
         {
           price: process.env.STRIPE_PRICE_ID,

@@ -1,4 +1,22 @@
+"use client";
+
+function getUserId() {
+  let userId = localStorage.getItem("proposalpilot_user_id");
+
+  if (!userId) {
+    userId = `user_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem("proposalpilot_user_id", userId);
+  }
+
+  return userId;
+}
+
 export default function PricingPage() {
+  function startCheckout() {
+    const userId = getUserId();
+    window.location.href = `/api/checkout?user_id=${encodeURIComponent(userId)}`;
+  }
+
   return (
     <main className="min-h-screen bg-black text-white">
       <section className="mx-auto max-w-5xl px-6 py-20">
@@ -35,15 +53,15 @@ export default function PricingPage() {
             <li className="rounded-xl bg-black p-3">Best for freelancers and small agencies</li>
           </ul>
 
-          <a
-            href="/api/checkout"
+          <button
+            onClick={startCheckout}
             className="mt-8 block w-full rounded-xl bg-emerald-500 px-5 py-4 text-center font-semibold text-black transition hover:bg-emerald-400"
           >
             Upgrade to Pro
-          </a>
+          </button>
 
           <p className="mt-4 text-center text-xs text-zinc-500">
-            Stripe checkout will be connected in the next step.
+            Secure checkout powered by Stripe.
           </p>
         </div>
       </section>

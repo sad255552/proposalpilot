@@ -1,45 +1,4 @@
-"use client";
-
-import { useEffect, useState } from "react";
-
 export default function SuccessPage() {
-  const [status, setStatus] = useState("Activating Pro access...");
-
-  useEffect(() => {
-    async function activatePro() {
-      try {
-        const userId = localStorage.getItem("proposalpilot_user_id");
-
-        if (!userId) {
-          setStatus("Payment completed. Open the generator to continue.");
-          return;
-        }
-
-        const res = await fetch("/api/usage/upgrade", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ userId })
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-          setStatus(data.error || "Payment completed, but Pro activation failed.");
-          return;
-        }
-
-        setStatus("Pro access activated successfully.");
-      } catch (error) {
-        console.error(error);
-        setStatus("Payment completed, but Pro activation failed.");
-      }
-    }
-
-    activatePro();
-  }, []);
-
   return (
     <main className="min-h-screen bg-black text-white">
       <section className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6 py-20 text-center">
@@ -52,12 +11,12 @@ export default function SuccessPage() {
         </h1>
 
         <p className="mt-6 text-lg text-zinc-400">
-          {status}
+          Your payment was completed. Pro access is activated through Stripe webhook.
         </p>
 
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
           <a
-            href="/"
+            href="/?pro=1"
             className="rounded-xl bg-emerald-500 px-6 py-4 font-semibold text-black transition hover:bg-emerald-400"
           >
             Generate proposal
