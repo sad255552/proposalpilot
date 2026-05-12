@@ -1,11 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+type ExperimentInput = {
+  visitors?: string;
+  signups?: string;
+  paid?: string;
+  revenue?: string;
+};
+
+function asList(value: any): string[] {
+  if (Array.isArray(value)) return value.map((item) => String(item));
+  if (typeof value === "string" && value.trim()) return [value];
+  return [];
+}
 
 export default function ABOSPage() {
   const [state, setState] = useState<any>({});
   const [latestRun, setLatestRun] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [experimentInputs, setExperimentInputs] = useState<Record<string, ExperimentInput>>({});
 
   useEffect(() => {
     loadState();
@@ -63,10 +78,92 @@ export default function ABOSPage() {
     }
   }
 
+  async function generateReport() {
+    setReportLoading(true);
+
+    try {
+      const res = await fetch("/api/abos/report", { method: "POST" });
+      const json = await res.json();
+
+      if (!res.ok) {
+        alert(json.error || "Report generation failed");
+      }
+
+      await loadState();
+    } catch (error: any) {
+      alert(error.message || "Report request failed");
+    } finally {
+      setReportLoading(false);
+    }
+  }
+
+  async function markTaskDone(taskId: string) {
+    const res = await fetch("/api/abos/tasks", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId, status: "done" })
+    });
+
+    const json = await res.json();
+    if (!res.ok) {
+      alert(json.error || "Task update failed");
+      return;
+    }
+
+    await loadState();
+  }
+
+  function updateExperimentInput(experimentId: string, key: keyof ExperimentInput, value: string) {
+    setExperimentInputs((current) => ({
+      ...current,
+      [experimentId]: {
+        ...(current[experimentId] || {}),
+        [key]: value
+      }
+    }));
+  }
+
+  async function decideExperiment(experiment: any, decision?: "kill" | "improve" | "scale") {
+    const input = experimentInputs[experiment.id] || {};
+
+    const payload = {
+      experimentId: experiment.id,
+      decision,
+      visitors: input.visitors ?? experiment.visitors ?? 0,
+      signups: input.signups ?? experiment.signups ?? 0,
+      paid: input.paid ?? experiment.paid ?? 0,
+      revenue: input.revenue ?? experiment.revenue ?? 0
+    };
+
+    const res = await fetch("/api/abos/decide", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const json = await res.json();
+    if (!res.ok) {
+      alert(json.error || "Decision failed");
+      return;
+    }
+
+    await loadState();
+  }
+
   const opportunities = state.opportunities || [];
   const tasks = state.tasks || [];
   const experiments = state.experiments || [];
   const reports = state.reports || [];
+  const latestReport = reports[0];
+
+  const groupedTasks = useMemo(() => {
+    return tasks.reduce((acc: Record<string, any[]>, task: any) => {
+      const category = task.category || "other";
+      acc[category] = acc[category] || [];
+      acc[category].push(task);
+      return acc;
+    }, {});
+  }, [tasks]);
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -80,8 +177,8 @@ export default function ABOSPage() {
               Autonomous Business Operating System
             </h1>
             <p className="mt-5 max-w-3xl text-zinc-400">
-              Scans opportunities, chooses the best, plans MVP, prepares launch,
-              measures results, kills weak experiments, and scales winners.
+              Scans opportunities, chooses the best, plans MVP, creates execution tasks,
+              launches experiments, measures results, reports daily, and decides kill / improve / scale.
             </p>
           </div>
 
@@ -92,6 +189,10 @@ export default function ABOSPage() {
 
             <button onClick={runABOS} disabled={loading} className="rounded-xl bg-emerald-500 px-5 py-4 font-semibold text-black hover:bg-emerald-400 disabled:opacity-60">
               {loading ? "Operating..." : "Run ABOS 2030"}
+            </button>
+
+            <button onClick={generateReport} disabled={reportLoading} className="rounded-xl bg-white px-5 py-4 font-semibold text-black hover:bg-zinc-200 disabled:opacity-60">
+              {reportLoading ? "Generating..." : "Generate Report"}
             </button>
 
             <button onClick={loadState} disabled={loading} className="rounded-xl border border-zinc-700 px-5 py-4 font-semibold hover:bg-zinc-900 disabled:opacity-60">
@@ -118,11 +219,11 @@ export default function ABOSPage() {
                 "2. Rank by pain, speed, monetization, acquisition, originality",
                 "3. Select the best opportunity",
                 "4. Generate MVP build plan",
-                "5. Generate launch campaign",
-                "6. Measure visitors, signups, paid users, revenue",
-                "7. Improve weak bottlenecks",
-                "8. Kill losers",
-                "9. Scale winners"
+                "5. Create execution tasks",
+                "6. Generate launch campaign",
+                "7. Measure visitors, signups, paid users, revenue",
+                "8. Generate daily operating report",
+                "9. Decide: kill, improve, or scale"
               ].map((step) => (
                 <div key={step} className="rounded-xl border border-zinc-800 bg-black p-4 text-sm text-zinc-300">
                   {step}
@@ -148,6 +249,127 @@ export default function ABOSPage() {
               </div>
             )}
           </div>
+        </section>
+
+        <section className="mt-10 rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-2xl font-bold">Execution Tasks</h2>
+            <span className="rounded-full border border-zinc-800 px-3 py-1 text-sm text-zinc-400">
+              {tasks.filter((task: any) => task.status === "done").length}/{tasks.length} done
+            </span>
+          </div>
+
+          <div className="mt-6 grid gap-5 lg:grid-cols-2">
+            {tasks.length === 0 && <p className="text-zinc-500">No tasks yet. Run ABOS 2030 to create execution tasks.</p>}
+
+            {Object.entries(groupedTasks).map(([category, items]) => (
+              <div key={category} className="rounded-2xl border border-zinc-800 bg-black p-5">
+                <h3 className="text-lg font-bold capitalize text-emerald-400">{category}</h3>
+                <div className="mt-4 grid gap-3">
+                  {(items as any[]).map((task: any) => (
+                    <div key={task.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h4 className="font-semibold">{task.title}</h4>
+                          <p className="mt-2 text-sm text-zinc-500">{task.description}</p>
+                        </div>
+                        <span className="rounded-lg bg-zinc-900 px-2 py-1 text-xs text-zinc-300">{task.priority}</span>
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-between gap-3">
+                        <span className="text-xs uppercase tracking-wide text-zinc-500">{task.status}</span>
+                        {task.status !== "done" && (
+                          <button onClick={() => markTaskDone(task.id)} className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-bold text-black hover:bg-emerald-400">
+                            Mark Done
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-10 rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
+          <h2 className="text-2xl font-bold">Experiments</h2>
+
+          <div className="mt-6 grid gap-4">
+            {experiments.length === 0 && <p className="text-zinc-500">No experiments yet. Run ABOS 2030.</p>}
+
+            {experiments.map((experiment: any) => {
+              const input = experimentInputs[experiment.id] || {};
+
+              return (
+                <div key={experiment.id} className="rounded-2xl border border-zinc-800 bg-black p-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <h3 className="text-xl font-bold">{experiment.name}</h3>
+                      <p className="mt-2 text-sm text-zinc-500">{experiment.hypothesis}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-lg bg-zinc-900 px-3 py-2">decision: {experiment.decision || "pending"}</span>
+                      <span className="rounded-lg bg-zinc-900 px-3 py-2">status: {experiment.status || "planned"}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 md:grid-cols-4">
+                    {(["visitors", "signups", "paid", "revenue"] as const).map((key) => (
+                      <label key={key} className="text-sm text-zinc-400">
+                        <span className="capitalize">{key}</span>
+                        <input
+                          type="number"
+                          value={input[key] ?? String(experiment[key] ?? 0)}
+                          onChange={(event) => updateExperimentInput(experiment.id, key, event.target.value)}
+                          className="mt-2 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-3 text-white outline-none focus:border-emerald-500"
+                        />
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <button onClick={() => decideExperiment(experiment)} className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold hover:bg-zinc-900">
+                      Auto Decide
+                    </button>
+                    <button onClick={() => decideExperiment(experiment, "kill")} className="rounded-xl border border-red-950 px-4 py-3 text-sm font-semibold text-red-300 hover:bg-red-950/30">
+                      Decide Kill
+                    </button>
+                    <button onClick={() => decideExperiment(experiment, "improve")} className="rounded-xl border border-yellow-950 px-4 py-3 text-sm font-semibold text-yellow-300 hover:bg-yellow-950/30">
+                      Decide Improve
+                    </button>
+                    <button onClick={() => decideExperiment(experiment, "scale")} className="rounded-xl border border-emerald-950 px-4 py-3 text-sm font-semibold text-emerald-300 hover:bg-emerald-950/30">
+                      Decide Scale
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="mt-10 rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-2xl font-bold">Reports</h2>
+            <button onClick={generateReport} disabled={reportLoading} className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black hover:bg-zinc-200 disabled:opacity-60">
+              Generate Report
+            </button>
+          </div>
+
+          {!latestReport ? (
+            <p className="mt-6 text-zinc-500">No reports yet. Generate the first daily operating report.</p>
+          ) : (
+            <div className="mt-6 rounded-2xl border border-zinc-800 bg-black p-5">
+              <p className="text-sm text-emerald-400">{latestReport.title || "ABOS Daily Operating Report"}</p>
+              <p className="mt-3 text-zinc-300">{latestReport.summary}</p>
+
+              <div className="mt-6 grid gap-4 md:grid-cols-3">
+                <ReportList title="Wins" items={asList(latestReport.wins)} />
+                <ReportList title="Risks" items={asList(latestReport.risks)} />
+                <ReportList title="Next Actions" items={asList(latestReport.next_actions)} />
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="mt-10 rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
@@ -217,6 +439,20 @@ function Box({ title, body }: { title: string; body: string }) {
       <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap text-xs leading-6 text-zinc-300">
         {body}
       </pre>
+    </div>
+  );
+}
+
+function ReportList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-xl bg-zinc-950 p-4">
+      <h3 className="font-semibold text-emerald-400">{title}</h3>
+      <ul className="mt-3 space-y-2 text-sm text-zinc-400">
+        {items.length === 0 && <li>No items yet.</li>}
+        {items.map((item) => (
+          <li key={item}>• {item}</li>
+        ))}
+      </ul>
     </div>
   );
 }
