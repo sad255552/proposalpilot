@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { supabaseBrowser } from "@/lib/supabase-browser";
 
 type Usage = {
   generationCount: number;
@@ -18,19 +19,27 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
 
   const [userId, setUserId] = useState("");
+  const [email, setEmail] = useState("");
   const [usage, setUsage] = useState<Usage | null>(null);
 
   useEffect(() => {
-    let storedUserId = localStorage.getItem("proposalpilot_user_id");
-
-    if (!storedUserId) {
-      storedUserId = generateUserId();
-      localStorage.setItem("proposalpilot_user_id", storedUserId);
-    }
-
-    setUserId(storedUserId);
-    checkUsage(storedUserId);
+    loadUser();
   }, []);
+
+  async function loadUser() {
+    const { data } = await supabaseBrowser.auth.getUser();
+
+    if (data.user) {
+      setUserId(data.user.id);
+      setEmail(data.user.email || "");
+      await checkUsage(data.user.id);
+    }
+  }
+
+  async function logout() {
+    await supabaseBrowser.auth.signOut();
+    window.location.href = "/";
+  }
 
   async function checkUsage(id = userId) {
     if (!id) return;
@@ -69,12 +78,17 @@ export default function Home() {
   }
 
   async function generateProposal() {
+    if (!userId) {
+      window.location.href = "/login";
+      return;
+    }
+
     if (!brief.trim() || !service.trim()) {
       alert("Add the client brief and your service first.");
       return;
     }
 
-    await checkUsage();
+    await checkUsage(userId);
 
     if (usage && !usage.canGenerate) {
       alert("Free limit reached. Upgrade to Pro for unlimited proposals.");
@@ -105,7 +119,7 @@ export default function Home() {
       }
 
       setProposal(data.proposal);
-      await incrementUsage();
+      await incrementUsage(userId);
     } catch (error) {
       console.error(error);
       alert("Generation failed. Check server logs.");
@@ -115,6 +129,11 @@ export default function Home() {
   }
 
   async function saveProposal() {
+    if (!userId) {
+      window.location.href = "/login";
+      return;
+    }
+
     if (!proposal.trim()) {
       alert("Generate a proposal first.");
       return;
@@ -129,6 +148,7 @@ export default function Home() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          userId,
           clientBrief: brief,
           service,
           proposal
@@ -171,12 +191,20 @@ export default function Home() {
             </p>
 
             <p className="mt-2 text-xs text-zinc-500">
-              {usage
-                ? usage.isPro
-                  ? "Pro plan active · unlimited proposals"
-                  : `${usage.remaining} free generations remaining`
-                : "Checking usage..."}
+              {!userId
+                ? "Login to generate proposals"
+                : usage
+                  ? usage.isPro
+                    ? "Pro plan active · unlimited proposals"
+                    : `${usage.remaining} free generations remaining`
+                  : "Checking usage..."}
             </p>
+
+            {email && (
+              <p className="mt-1 text-xs text-zinc-600">
+                {email}
+              </p>
+            )}
           </div>
 
           <div className="flex gap-2">
@@ -193,6 +221,29 @@ export default function Home() {
             >
               Dashboard
             </a>
+
+            <a
+              href="/account"
+              className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-zinc-900"
+            >
+              Account
+            </a>
+
+            {userId ? (
+              <button
+                onClick={logout}
+                className="rounded-xl border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-zinc-900"
+              >
+                Logout
+              </button>
+            ) : (
+              <a
+                href="/login"
+                className="rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-black transition hover:bg-emerald-400"
+              >
+                Login
+              </a>
+            )}
           </div>
         </div>
 
@@ -242,9 +293,11 @@ export default function Home() {
           >
             {loading
               ? "Generating with AI..."
-              : usage && !usage.canGenerate
-                ? "Upgrade to Pro to continue"
-                : "Generate Proposal"}
+              : !userId
+                ? "Login to generate"
+                : usage && !usage.canGenerate
+                  ? "Upgrade to Pro to continue"
+                  : "Generate Proposal"}
           </button>
 
           {usage && !usage.canGenerate && (
@@ -295,10 +348,6 @@ export default function Home() {
       </section>
     </main>
   );
-}
-
-function generateUserId() {
-  return `user_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
 function MiniCard({ text }: { text: string }) {

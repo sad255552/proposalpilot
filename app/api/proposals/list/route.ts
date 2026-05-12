@@ -4,29 +4,20 @@ import { supabase } from "@/lib/supabase";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-
     const userId = body.userId || "";
-    const clientBrief = body.clientBrief || "";
-    const service = body.service || "";
-    const proposal = body.proposal || "";
 
-    if (!userId.trim() || !clientBrief.trim() || !service.trim() || !proposal.trim()) {
+    if (!userId.trim()) {
       return NextResponse.json(
-        { error: "Missing user, client brief, service, or proposal." },
+        { error: "Missing userId." },
         { status: 400 }
       );
     }
 
     const { data, error } = await supabase
       .from("proposals")
-      .insert({
-        user_id: userId,
-        client_brief: clientBrief,
-        service,
-        proposal
-      })
-      .select()
-      .single();
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
 
     if (error) {
       return NextResponse.json(
@@ -36,12 +27,11 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({
-      success: true,
-      proposal: data
+      proposals: data || []
     });
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || "Failed to save proposal." },
+      { error: error.message || "Failed to load proposals." },
       { status: 500 }
     );
   }

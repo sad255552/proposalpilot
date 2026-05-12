@@ -1,19 +1,31 @@
 "use client";
 
-function getUserId() {
-  let userId = localStorage.getItem("proposalpilot_user_id");
-
-  if (!userId) {
-    userId = `user_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem("proposalpilot_user_id", userId);
-  }
-
-  return userId;
-}
+import { useEffect, useState } from "react";
+import { supabaseBrowser } from "@/lib/supabase-browser";
 
 export default function PricingPage() {
+  const [userId, setUserId] = useState("");
+  const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    async function loadUser() {
+      const { data } = await supabaseBrowser.auth.getUser();
+
+      if (data.user) {
+        setUserId(data.user.id);
+        setEmail(data.user.email || "");
+      }
+    }
+
+    loadUser();
+  }, []);
+
   function startCheckout() {
-    const userId = getUserId();
+    if (!userId) {
+      window.location.href = "/login";
+      return;
+    }
+
     window.location.href = `/api/checkout?user_id=${encodeURIComponent(userId)}`;
   }
 
@@ -36,6 +48,10 @@ export default function PricingPage() {
           <p className="mx-auto mt-6 max-w-2xl text-lg text-zinc-400">
             Generate better proposals faster, save your drafts, and reuse your best work.
           </p>
+
+          <p className="mt-4 text-sm text-zinc-500">
+            {email ? `Logged in as ${email}` : "Login required before checkout"}
+          </p>
         </div>
 
         <div className="mx-auto mt-12 max-w-xl rounded-3xl border border-emerald-900 bg-zinc-950 p-8 shadow-2xl">
@@ -54,10 +70,11 @@ export default function PricingPage() {
           </ul>
 
           <button
+            type="button"
             onClick={startCheckout}
             className="mt-8 block w-full rounded-xl bg-emerald-500 px-5 py-4 text-center font-semibold text-black transition hover:bg-emerald-400"
           >
-            Upgrade to Pro
+            {userId ? "Upgrade to Pro" : "Login to upgrade"}
           </button>
 
           <p className="mt-4 text-center text-xs text-zinc-500">

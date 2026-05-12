@@ -1,4 +1,7 @@
-import { supabase } from "@/lib/supabase";
+"use client";
+
+import { useEffect, useState } from "react";
+import { supabaseBrowser } from "@/lib/supabase-browser";
 import ProposalActions from "@/components/ProposalActions";
 
 type Proposal = {
@@ -9,26 +12,44 @@ type Proposal = {
   created_at: string;
 };
 
-export default async function DashboardPage() {
-  const { data: proposals, error } = await supabase
-    .from("proposals")
-    .select("*")
-    .order("created_at", { ascending: false });
+export default function DashboardPage() {
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState("");
 
-  if (error) {
-    return (
-      <main className="min-h-screen bg-black p-6 text-white">
-        <div className="mx-auto max-w-6xl">
-          <a href="/" className="text-sm text-emerald-400">
-            ← Back
-          </a>
-          <h1 className="mt-8 text-4xl font-bold">Dashboard</h1>
-          <p className="mt-4 rounded-xl border border-red-900 bg-red-950/40 p-4 text-red-200">
-            {error.message}
-          </p>
-        </div>
-      </main>
-    );
+  useEffect(() => {
+    loadProposals();
+  }, []);
+
+  async function loadProposals() {
+    const { data } = await supabaseBrowser.auth.getUser();
+
+    if (!data.user) {
+      window.location.href = "/login";
+      return;
+    }
+
+    setEmail(data.user.email || "");
+
+    const res = await fetch("/api/proposals/list", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        userId: data.user.id
+      })
+    });
+
+    const json = await res.json();
+
+    if (res.ok) {
+      setProposals(json.proposals || []);
+    } else {
+      alert(json.error || "Failed to load proposals.");
+    }
+
+    setLoading(false);
   }
 
   return (
@@ -45,8 +66,14 @@ export default async function DashboardPage() {
             </h1>
 
             <p className="mt-4 text-zinc-400">
-              Review, copy, and export generated proposal drafts.
+              Review, copy, and export your proposal drafts.
             </p>
+
+            {email && (
+              <p className="mt-2 text-xs text-zinc-600">
+                {email}
+              </p>
+            )}
           </div>
 
           <a
@@ -57,13 +84,17 @@ export default async function DashboardPage() {
           </a>
         </div>
 
-        {!proposals || proposals.length === 0 ? (
+        {loading ? (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-10 text-center text-zinc-400">
+            Loading proposals...
+          </div>
+        ) : proposals.length === 0 ? (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-10 text-center text-zinc-400">
             No proposals saved yet.
           </div>
         ) : (
           <div className="grid gap-5">
-            {proposals.map((proposal: Proposal) => (
+            {proposals.map((proposal) => (
               <div
                 key={proposal.id}
                 className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl"
