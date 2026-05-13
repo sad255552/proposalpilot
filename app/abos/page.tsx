@@ -28,6 +28,20 @@ type AbosAsset = {
   description: string;
   content: Record<string, unknown>;
   status: string;
+  public_url?: string | null;
+};
+
+type AutopilotStatus = "idle" | "running" | "completed" | "failed";
+
+type AutopilotResult = {
+  success?: boolean;
+  opportunities_created?: number;
+  run_id?: string | null;
+  tasks_created?: number;
+  report_id?: string | null;
+  assets_created?: number;
+  warnings?: string[];
+  error?: string;
 };
 
 const ASSET_COPY_LABELS: Record<AssetType, string> = {
@@ -79,7 +93,8 @@ function normalizeAsset(value: unknown): AbosAsset | null {
     title: typeof value.title === "string" ? value.title : ASSET_TYPE_LABELS[value.type],
     description: typeof value.description === "string" ? value.description : "",
     content: isRecord(value.content) ? value.content : {},
-    status: typeof value.status === "string" ? value.status : "draft"
+    status: typeof value.status === "string" ? value.status : "draft",
+    public_url: typeof value.public_url === "string" ? value.public_url : null
   };
 }
 
@@ -94,6 +109,9 @@ export default function ABOSPage() {
   const [loading, setLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [assetLoading, setAssetLoading] = useState(false);
+  const [publishingAssetId, setPublishingAssetId] = useState<string | null>(null);
+  const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus>("idle");
+  const [autopilotResult, setAutopilotResult] = useState<AutopilotResult | null>(null);
   const [experimentInputs, setExperimentInputs] = useState<Record<string, ExperimentInput>>({});
 
   useEffect(() => {
@@ -216,6 +234,51 @@ export default function ABOSPage() {
     }
   }
 
+  async function publishAsset(assetId?: string) {
+    if (!assetId) {
+      alert("Cannot publish an asset without an id.");
+      return;
+    }
+
+    setPublishingAssetId(assetId);
+
+    try {
+      const res = await fetch("/api/abos/assets/publish", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assetId })
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        alert(json.error || "Asset publish failed");
+        return;
+      }
+
+      await loadAssets();
+    } catch (error: any) {
+      alert(error.message || "Asset publish request failed");
+    } finally {
+      setPublishingAssetId(null);
+    }
+  }
+
+  async function runAutopilot() {
+    setAutopilotStatus("running");
+    setAutopilotResult(null);
+
+    try {
+      const res = await fetch("/api/abos/autopilot", { method: "POST" });
+      const json = await res.json();
+      setAutopilotResult(json);
+      setAutopilotStatus(res.ok ? "completed" : "failed");
+      await loadState();
+    } catch (error: any) {
+      setAutopilotStatus("failed");
+      setAutopilotResult({ success: false, error: error.message || "Autopilot request failed" });
+    }
+  }
+
   async function markTaskDone(taskId: string) {
     const res = await fetch("/api/abos/tasks", {
       method: "PATCH",
@@ -274,6 +337,21 @@ export default function ABOSPage() {
   const experiments = state.experiments || [];
   const reports = state.reports || [];
   const latestReport = reports[0];
+  const publishedAssets = assets.filter((asset) => asset.status === "published" || Boolean(asset.public_url)).length;
+  const operatingScore = useMemo(() => {
+    const opportunityScore = Math.min(opportunities.length, 10) * 2;
+    const taskScore = Math.min(tasks.length, 20);
+    const doneTaskScore = Math.min(tasks.filter((task: any) => task.status === "done").length, 20);
+    const reportScore = Math.min(reports.length, 5) * 4;
+    const assetScore = Math.min(assets.length, 10) * 2;
+    const publishedScore = Math.min(publishedAssets, 10) * 2;
+    const winnerScore = Math.min(
+      experiments.filter((experiment: any) => experiment.decision === "scale" || experiment.status === "winner").length,
+      2
+    ) * 10;
+
+    return Math.min(100, Math.round(opportunityScore + taskScore + doneTaskScore + reportScore + assetScore + publishedScore + winnerScore));
+  }, [assets.length, experiments, opportunities.length, publishedAssets, reports.length, tasks]);
 
   const groupedAssets = useMemo(() => {
     return assets.reduce((acc: Record<AssetType, AbosAsset[]>, asset) => {
@@ -332,13 +410,60 @@ export default function ABOSPage() {
           </div>
         </div>
 
-        <section className="mt-10 grid gap-4 md:grid-cols-6">
+        <section className="mt-10 grid gap-4 md:grid-cols-7">
           <Metric label="Opportunities" value={String(opportunities.length)} />
           <Metric label="Tasks" value={String(tasks.length)} />
           <Metric label="Experiments" value={String(experiments.length)} />
           <Metric label="Reports" value={String(reports.length)} />
           <Metric label="Assets" value={String(assets.length)} />
+          <Metric label="Operating Score" value={`${operatingScore}/100`} />
           <Metric label="Mode" value="2030" />
+        </section>
+
+        <section className="mt-10 rounded-3xl border border-emerald-950 bg-zinc-950 p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">Autopilot</h2>
+              <p className="mt-2 text-sm text-zinc-500">
+                Runs the daily loop: market scan, ABOS plan, report, and SaaS asset generation.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="rounded-full border border-zinc-800 px-3 py-2 text-xs uppercase tracking-wide text-zinc-400">
+                {autopilotStatus}
+              </span>
+              <button onClick={runAutopilot} disabled={autopilotStatus === "running"} className="rounded-xl bg-emerald-500 px-5 py-4 font-semibold text-black hover:bg-emerald-400 disabled:opacity-60">
+                {autopilotStatus === "running" ? "Running Autopilot..." : "Run Daily Autopilot"}
+              </button>
+            </div>
+          </div>
+
+          {autopilotResult && (
+            <div className="mt-6 rounded-2xl border border-zinc-800 bg-black p-5">
+              <div className="grid gap-3 md:grid-cols-5">
+                <MiniMetric label="Opportunities" value={String(autopilotResult.opportunities_created ?? 0)} />
+                <MiniMetric label="Tasks" value={String(autopilotResult.tasks_created ?? 0)} />
+                <MiniMetric label="Assets" value={String(autopilotResult.assets_created ?? 0)} />
+                <MiniMetric label="Run" value={autopilotResult.run_id || "none"} />
+                <MiniMetric label="Report" value={autopilotResult.report_id || "none"} />
+              </div>
+
+              {autopilotResult.error && (
+                <p className="mt-4 rounded-xl border border-red-950 bg-red-950/20 p-3 text-sm text-red-300">
+                  {autopilotResult.error}
+                </p>
+              )}
+
+              {Array.isArray(autopilotResult.warnings) && autopilotResult.warnings.length > 0 && (
+                <div className="mt-4 rounded-xl border border-yellow-950 bg-yellow-950/20 p-3 text-sm text-yellow-200">
+                  <p className="font-semibold">Warnings</p>
+                  <ul className="mt-2 space-y-1">
+                    {autopilotResult.warnings.map((warning) => <li key={warning}>• {warning}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         <section className="mt-10 grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
@@ -415,7 +540,12 @@ export default function ABOSPage() {
 
                 <div className="mt-4 grid gap-3">
                   {items.map((asset, index) => (
-                    <AssetCard key={asset.id || `${asset.type}-${index}`} asset={asset} />
+                    <AssetCard
+                      key={asset.id || `${asset.type}-${index}`}
+                      asset={asset}
+                      publishing={publishingAssetId === asset.id}
+                      onPublish={publishAsset}
+                    />
                   ))}
                 </div>
               </div>
@@ -593,6 +723,15 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-zinc-950 p-4">
+      <p className="text-xs text-zinc-500">{label}</p>
+      <p className="mt-2 truncate text-sm font-semibold text-zinc-200">{value}</p>
+    </div>
+  );
+}
+
 function Box({ title, body }: { title: string; body: string }) {
   async function copy() {
     await navigator.clipboard.writeText(body || "");
@@ -615,8 +754,17 @@ function Box({ title, body }: { title: string; body: string }) {
   );
 }
 
-function AssetCard({ asset }: { asset: AbosAsset }) {
+function AssetCard({
+  asset,
+  publishing,
+  onPublish
+}: {
+  asset: AbosAsset;
+  publishing: boolean;
+  onPublish: (assetId?: string) => void;
+}) {
   const body = previewContent(asset.content);
+  const publicUrl = asset.public_url || (asset.status === "published" && asset.id ? `/assets/${asset.id}` : "");
 
   async function copy() {
     await navigator.clipboard.writeText(body || "");
@@ -631,18 +779,32 @@ function AssetCard({ asset }: { asset: AbosAsset }) {
           <p className="mt-2 text-sm text-zinc-500">{asset.description}</p>
         </div>
 
-        <span className="w-fit rounded-lg bg-zinc-900 px-3 py-2 text-xs uppercase tracking-wide text-zinc-300">
+        <span className={`w-fit rounded-lg px-3 py-2 text-xs uppercase tracking-wide ${asset.status === "published" ? "bg-emerald-950 text-emerald-200" : "bg-zinc-900 text-zinc-300"}`}>
           {asset.status}
         </span>
       </div>
+
+      {publicUrl && (
+        <div className="mt-4 rounded-lg border border-emerald-950 bg-emerald-950/20 p-3 text-xs text-emerald-200">
+          <p>Public URL: {publicUrl}</p>
+          <a href={publicUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex font-semibold text-emerald-300 hover:text-emerald-200">
+            Open Public Page
+          </a>
+        </div>
+      )}
 
       <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-zinc-900 bg-black p-3 text-xs leading-6 text-zinc-300">
         {body}
       </pre>
 
-      <button onClick={copy} className="mt-4 rounded-lg border border-zinc-700 px-3 py-2 text-xs font-semibold hover:bg-zinc-900">
-        {ASSET_COPY_LABELS[asset.type]}
-      </button>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <button onClick={copy} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-semibold hover:bg-zinc-900">
+          {ASSET_COPY_LABELS[asset.type]}
+        </button>
+        <button onClick={() => onPublish(asset.id)} disabled={publishing || !asset.id} className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-bold text-black hover:bg-emerald-400 disabled:opacity-60">
+          {publishing ? "Publishing..." : "Publish"}
+        </button>
+      </div>
     </div>
   );
 }
