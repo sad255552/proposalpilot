@@ -101,6 +101,15 @@ function buildExecutionTasks(plan: any): TaskDraft[] {
   return tasks;
 }
 
+const ABOS_RUN_SKILL_RULES = `
+Apply the reusable ABOS skill rules from:
+- /abos-skills/opportunity-scanner.md for opportunity selection and risk review.
+- /abos-skills/mvp-builder.md for the MVP plan and Codex build prompt.
+- /abos-skills/marketing-launch.md for positioning, offer, channels, launch posts, and marketing prompt.
+- /abos-skills/experiment-decision.md for metrics and kill / improve / scale thresholds.
+- /abos-skills/autopilot-operator.md for operating decision, task priorities, and safety review.
+`;
+
 export async function POST() {
   try {
     if (!process.env.OPENAI_API_KEY) {
@@ -127,6 +136,8 @@ export async function POST() {
 
     const prompt = `
 You are ABOS 2030, an ethical autonomous SaaS operating system.
+
+${ABOS_RUN_SKILL_RULES}
 
 Your job:
 1. Choose the best opportunity.

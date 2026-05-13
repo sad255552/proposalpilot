@@ -12,6 +12,13 @@ function cleanJson(text: string) {
   return text.replace(/```json/g, "").replace(/```/g, "").trim();
 }
 
+const ABOS_REPORT_SKILL_RULES = `
+Apply the reusable ABOS skill rules from:
+- /abos-skills/daily-report.md for factual summary, wins, risks, and next actions.
+- /abos-skills/experiment-decision.md for experiment status, threshold interpretation, and decision language.
+- /abos-skills/autopilot-operator.md for the next operating decision and safety-aware prioritization.
+`;
+
 function fallbackReport(payload: any) {
   const run = payload.run;
   const tasks = payload.tasks || [];
@@ -75,7 +82,11 @@ export async function POST() {
           messages: [
             {
               role: "user",
-              content: `Create a concise ABOS operating report from this data. Return valid JSON only with this shape: {"title":"ABOS Daily Operating Report","summary":"...","wins":["..."],"risks":["..."],"next_actions":["..."]}. Data: ${JSON.stringify(payload)}`
+              content: `Create a concise ABOS operating report from this data.
+
+${ABOS_REPORT_SKILL_RULES}
+
+Return valid JSON only with this shape: {"title":"ABOS Daily Operating Report","summary":"...","wins":["..."],"risks":["..."],"next_actions":["..."]}. Data: ${JSON.stringify(payload)}`
             }
           ],
           temperature: 0.3
