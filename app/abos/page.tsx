@@ -9,6 +9,20 @@ type ExperimentInput = {
   revenue?: string;
 };
 
+type ManualOpportunityForm = {
+  title: string;
+  audience: string;
+  pain: string;
+  product_angle: string;
+  monetization: string;
+  acquisition_channels: string;
+  build_complexity: string;
+  revenue_potential: string;
+  speed_to_mvp: string;
+  originality_score: string;
+  total_score: string;
+};
+
 type AssetType =
   | "landing_page"
   | "pricing_page"
@@ -70,6 +84,20 @@ const ASSET_TYPE_LABELS: Record<AssetType, string> = {
   ad_creatives: "Ad Creatives"
 };
 
+const DEFAULT_MANUAL_OPPORTUNITY: ManualOpportunityForm = {
+  title: "AI Client Feedback Loop",
+  audience: "Agencies, freelancers, and small SaaS teams",
+  pain: "Collecting client feedback after delivery is scattered, slow, and hard to convert into actionable improvement tasks.",
+  product_angle: "AI tool that collects client feedback, summarizes it, detects urgency/sentiment, and turns it into prioritized tasks.",
+  monetization: "$19/month Starter, $49/month Pro",
+  acquisition_channels: "LinkedIn, Cold Email, Agency Facebook Groups, Product Hunt",
+  build_complexity: "35",
+  revenue_potential: "80",
+  speed_to_mvp: "85",
+  originality_score: "70",
+  total_score: "78"
+};
+
 function asList(value: any): string[] {
   if (Array.isArray(value)) return value.map((item) => String(item));
   if (typeof value === "string" && value.trim()) return [value];
@@ -113,6 +141,9 @@ export default function ABOSPage() {
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus>("idle");
   const [autopilotResult, setAutopilotResult] = useState<AutopilotResult | null>(null);
   const [experimentInputs, setExperimentInputs] = useState<Record<string, ExperimentInput>>({});
+  const [manualOpportunity, setManualOpportunity] = useState<ManualOpportunityForm>(DEFAULT_MANUAL_OPPORTUNITY);
+  const [manualLoading, setManualLoading] = useState(false);
+  const [manualMessage, setManualMessage] = useState<string | null>(null);
 
   useEffect(() => {
     loadState();
@@ -279,6 +310,53 @@ export default function ABOSPage() {
     }
   }
 
+  function updateManualOpportunity(field: keyof ManualOpportunityForm, value: string) {
+    setManualOpportunity((current) => ({
+      ...current,
+      [field]: value
+    }));
+    setManualMessage(null);
+  }
+
+  async function createManualOpportunity() {
+    setManualLoading(true);
+    setManualMessage(null);
+
+    try {
+      const payload = {
+        ...manualOpportunity,
+        acquisition_channels: manualOpportunity.acquisition_channels
+          .split(",")
+          .map((channel) => channel.trim())
+          .filter(Boolean),
+        build_complexity: Number(manualOpportunity.build_complexity),
+        revenue_potential: Number(manualOpportunity.revenue_potential),
+        speed_to_mvp: Number(manualOpportunity.speed_to_mvp),
+        originality_score: Number(manualOpportunity.originality_score),
+        total_score: Number(manualOpportunity.total_score)
+      };
+
+      const res = await fetch("/api/abos/opportunities/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        setManualMessage(json.error || "Manual opportunity creation failed.");
+        return;
+      }
+
+      setManualMessage(`Created test opportunity: ${json.opportunity?.title || manualOpportunity.title}`);
+      await loadState();
+    } catch (error: any) {
+      setManualMessage(error.message || "Manual opportunity request failed.");
+    } finally {
+      setManualLoading(false);
+    }
+  }
+
   async function markTaskDone(taskId: string) {
     const res = await fetch("/api/abos/tasks", {
       method: "PATCH",
@@ -418,6 +496,93 @@ export default function ABOSPage() {
           <Metric label="Assets" value={String(assets.length)} />
           <Metric label="Operating Score" value={`${operatingScore}/100`} />
           <Metric label="Mode" value="2030" />
+        </section>
+
+        <section className="mt-10 rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">Manual SaaS Idea Test</h2>
+              <p className="mt-2 text-sm text-zinc-500">
+                Create one scored opportunity for ABOS 2030 to evaluate against scanned ideas.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-emerald-950 bg-black px-4 py-3 text-sm">
+              <span className="text-zinc-500">Total Score</span>
+              <span className="ml-3 font-bold text-emerald-400">{manualOpportunity.total_score}</span>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+            <ManualField
+              label="Title"
+              value={manualOpportunity.title}
+              onChange={(value) => updateManualOpportunity("title", value)}
+            />
+            <ManualField
+              label="Audience"
+              value={manualOpportunity.audience}
+              onChange={(value) => updateManualOpportunity("audience", value)}
+            />
+            <ManualField
+              label="Pain"
+              value={manualOpportunity.pain}
+              onChange={(value) => updateManualOpportunity("pain", value)}
+              multiline
+            />
+            <ManualField
+              label="Product Angle"
+              value={manualOpportunity.product_angle}
+              onChange={(value) => updateManualOpportunity("product_angle", value)}
+              multiline
+            />
+            <ManualField
+              label="Monetization"
+              value={manualOpportunity.monetization}
+              onChange={(value) => updateManualOpportunity("monetization", value)}
+            />
+            <ManualField
+              label="Acquisition Channels"
+              value={manualOpportunity.acquisition_channels}
+              onChange={(value) => updateManualOpportunity("acquisition_channels", value)}
+            />
+            <ManualField
+              label="Build Complexity"
+              value={manualOpportunity.build_complexity}
+              onChange={(value) => updateManualOpportunity("build_complexity", value)}
+              type="number"
+            />
+            <ManualField
+              label="Revenue Potential"
+              value={manualOpportunity.revenue_potential}
+              onChange={(value) => updateManualOpportunity("revenue_potential", value)}
+              type="number"
+            />
+            <ManualField
+              label="Speed To MVP"
+              value={manualOpportunity.speed_to_mvp}
+              onChange={(value) => updateManualOpportunity("speed_to_mvp", value)}
+              type="number"
+            />
+            <ManualField
+              label="Originality Score"
+              value={manualOpportunity.originality_score}
+              onChange={(value) => updateManualOpportunity("originality_score", value)}
+              type="number"
+            />
+          </div>
+
+          <div className="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <button onClick={createManualOpportunity} disabled={manualLoading} className="w-fit rounded-xl bg-emerald-500 px-5 py-4 font-semibold text-black hover:bg-emerald-400 disabled:opacity-60">
+              {manualLoading ? "Creating..." : "Create Test Opportunity"}
+            </button>
+
+            {manualMessage && (
+              <p className="rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-zinc-300">
+                {manualMessage}
+              </p>
+            )}
+          </div>
         </section>
 
         <section className="mt-10 rounded-3xl border border-emerald-950 bg-zinc-950 p-6">
@@ -711,6 +876,43 @@ export default function ABOSPage() {
         </section>
       </section>
     </main>
+  );
+}
+
+function ManualField({
+  label,
+  value,
+  onChange,
+  type = "text",
+  multiline = false
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: "text" | "number";
+  multiline?: boolean;
+}) {
+  return (
+    <label className="text-sm text-zinc-400">
+      <span>{label}</span>
+      {multiline ? (
+        <textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          rows={4}
+          className="mt-2 w-full rounded-xl border border-zinc-800 bg-black px-3 py-3 text-white outline-none focus:border-emerald-500"
+        />
+      ) : (
+        <input
+          type={type}
+          min={type === "number" ? 0 : undefined}
+          max={type === "number" ? 100 : undefined}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="mt-2 w-full rounded-xl border border-zinc-800 bg-black px-3 py-3 text-white outline-none focus:border-emerald-500"
+        />
+      )}
+    </label>
   );
 }
 
